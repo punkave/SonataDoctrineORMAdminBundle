@@ -42,16 +42,12 @@ abstract class AbstractDateFilter extends Filter
                 return;
             }
 
-            //default type for range filter
-            $data['type'] = !isset($data['type']) || !is_numeric($data['type']) ?  DateRangeType::TYPE_BETWEEN : $data['type'];
-
-            //this is a ranged query, we need to decide between 'between' and 'not between'
-            $valueStart = $this->transformInput($data['value']['start']);
-            $valueEnd = $this->transformInput($data['value']['end']);
-
-            if (!$valueStart || !$valueEnd) {
+            if (!$data['value']['start'] || !$data['value']['end']) {
                 return;
             }
+
+            //default type for range filter
+            $data['type'] = !isset($data['type']) || !is_numeric($data['type']) ?  DateRangeType::TYPE_BETWEEN : $data['type'];
 
             if ($data['type'] == DateRangeType::TYPE_NOT_BETWEEN) {
                 $this->applyWhere($queryBuilder, sprintf('%s.%s < :%s OR %s.%s > :%s', $alias, $field, $this->getName().'_start', $alias, $field, $this->getName().'_end'));
@@ -60,9 +56,14 @@ abstract class AbstractDateFilter extends Filter
                 $this->applyWhere($queryBuilder, sprintf('%s.%s %s :%s', $alias, $field, '<=', $this->getName().'_end'));
             }
 
-            $queryBuilder->setParameter($this->getName().'_start',  $valueStart);
-            $queryBuilder->setParameter($this->getName().'_end',  $valueEnd);
+            $queryBuilder->setParameter($this->getName().'_start',  $data['value']['start']);
+            $queryBuilder->setParameter($this->getName().'_end',  $data['value']['end']);
         } else {
+
+            if (!$data['value']) {
+                return;
+            }
+
             //default type for simple filter
             $data['type'] = !isset($data['type']) || !is_numeric($data['type']) ? DateType::TYPE_EQUAL : $data['type'];
 
@@ -73,63 +74,10 @@ abstract class AbstractDateFilter extends Filter
             if (in_array($operator, array('NULL', 'NOT NULL'))) {
                 $this->applyWhere($queryBuilder, sprintf('%s.%s IS %s ', $alias, $field, $operator));
             } else {
-                $value = $this->transformInput($data['value']);
-
-                if (!$value) {
-                    return;
-                }
-
                 $this->applyWhere($queryBuilder, sprintf('%s.%s %s :%s', $alias, $field, $operator, $this->getName()));
-                $queryBuilder->setParameter($this->getName(),  $value);
+                $queryBuilder->setParameter($this->getName(), $data['value']);
             }
         }
-    }
-
-    /**
-     * Transforms input based on value type and class attributes,
-     * returns false on failure
-     * @param mixed $input
-     * @return mixed
-     */
-    protected function transformInput($input)
-    {
-        $outputFormat = $this->time ? 'Y-m-d H:i:s' : 'Y-m-d';
-
-        if (is_array($input)) {
-            if ($this->time) {
-                $transformer = new DateTimeToArrayTransformer(null, null, array('year', 'month', 'day', 'hour', 'minute'));
-                $input = array_merge($input['date'], $input['time']);
-            } else {
-                $transformer = new DateTimeToArrayTransformer(null, null, array('year', 'month', 'day'));
-            }
-        }
-
-        if (is_string($input)) {
-            $transformer = new DateTimeToStringTransformer(null, null, $this->getFieldFormat());
-        }
-
-        $transformedValue = $transformer->reverseTransform($input);
-
-        if ($transformedValue) {
-            return $transformedValue->format($outputFormat);
-        }
-
-        return false;
-    }
-
-    /**
-     * Returns date format if passed to widget
-     * @return string
-     */
-    protected function getFieldFormat()
-    {
-        $options = $this->getFieldOptions();
-
-        if (array_key_exists('format', $options)) {
-            return $options['format'];
-        }
-
-        return 'Y-m-d';
     }
 
     /**
